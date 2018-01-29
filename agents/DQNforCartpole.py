@@ -70,6 +70,7 @@ class DQNforCartpole:
         args = inspect.getfullargspec(self.__init__)[0]
         locals_ = locals()
         self.params = {k: locals_[k] if k in locals_ else None for k in args[2:]}
+        self.exp_name = exp_name
 
     def reset(self):
         """
