@@ -72,12 +72,20 @@ class DQNforCartpole:
         self.params = {k: locals_[k] if k in locals_ else None for k in args[2:]}
         self.exp_name = exp_name
 
+        # set initial seeds to 0
+        tf.set_random_seed(0)
+        np.random.seed(0)
+
     def reset(self):
         """
         resets the exploration_rate to 1.0 and resets the neural network to its original status
         """
         self.QNetwork = self.build_model()
         self.exploration_rate = 1.0
+
+        # reset initial seeds to 0
+        tf.set_random_seed(0)
+        np.random.seed(0)
 
     def build_model(self):
         """
