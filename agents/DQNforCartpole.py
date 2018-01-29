@@ -83,7 +83,7 @@ class DQNforCartpole:
         self.QNetwork = self.build_model()
         self.exploration_rate = 1.0
 
-        # reset initial seeds to 0
+        # set initial seeds to 0
         tf.set_random_seed(0)
         np.random.seed(0)
 
@@ -271,6 +271,7 @@ class DQNforCartpole:
 
             returns = [trajectory["reward"].sum() for trajectory in trajectories]
             episode_lengths = [len(trajectory["reward"]) for trajectory in trajectories]
+            logz.log_tabular("Experiment", self.exp_name)
             logz.log_tabular("TrialNo", trialNumber + 1)
             logz.log_tabular("seed", seed)
             logz.log_tabular("Episode", (episode - self.replay_start_size) + 1)
