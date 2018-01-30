@@ -152,15 +152,21 @@ class DQNforCartpole:
         """
         Replays a remembered experience.
 
-        First, a random sample of experiences with size "batch_size" is chosen from the replay memory. Then,
-        the loss function is defined, based on the experience sampled. TODO: explain more about it
+        First, a random sample of experiences with size "batch_size" is chosen from
+        the replay memory. Then, the loss function is defined, based on
+        the experience sampled.
 
         :param batch_size: How many episodes should be sampled from the replay memory?
         """
         random_experience = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in random_experience:
-            # TODO: explain all this in more detail
+            # if we have reached the terminal state (i.e., if done is True) we
+            # set the target in the loss function to be the reward obtained for the
+            # last transition (i.e., the value that is stored in reward)
             target = reward
+            # if we have not reached the terminal state, the return (i.e., the future
+            # discounted reward, defined by the Bellman equation) is used as the target
+            # instead
             if not done:
                 target = reward + self.discount_rate * np.amax(
                     self.QNetwork.predict(next_state)[0])

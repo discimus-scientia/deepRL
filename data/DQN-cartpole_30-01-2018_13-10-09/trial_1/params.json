@@ -1,0 +1,11 @@
+{"discount_rate"	:	0.8,
+"exp_name"	:	"dqn11",
+"exploration_rate"	:	1.0,
+"exploration_rate_decay"	:	0.999,
+"exploration_rate_min"	:	0.1,
+"learning_rate"	:	0.0005,
+"nn_architecture"	:	[20,
+10],
+"replay_memory_capacity"	:	10000,
+"replay_sampling_batch_size"	:	32,
+"replay_start_size"	:	32}
