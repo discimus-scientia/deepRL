@@ -305,7 +305,7 @@ class DQNforCartpole:
         :return:
         """
 
-        allEpisodes = []
+        allTrials = []
 
         for trial in range(numberOfTrials):
 
@@ -319,25 +319,25 @@ class DQNforCartpole:
             logz.configure_output_dir(os.path.join(logdir, 'trial_{}'.format(trial+1)))
             logz.save_params(self.params)
 
-            thisEpisode = self.solve(numberOfEpisodes=numberOfEpisodesForEachTrial,
+            thisTrial = self.solve(numberOfEpisodes=numberOfEpisodesForEachTrial,
                                      numberOfTimesteps=500,
                                      trialNumber=trial,  # for logging purposes
                                      seed=seed  # for logging purposes
                                      )
 
-            allEpisodes.append(thisEpisode)
+            allTrials.append(thisTrial)
 
             # reset agent
             self.reset()
 
         print("Average number of required episodes to solve environment "
               "over {} trials: {}".format(
-            numberOfTrials, np.mean(allEpisodes)))
+            numberOfTrials, np.mean(allTrials)))
 
         filename = 'avg_number_of_required_episodes.txt'
         path_to_file = os.path.join(logdir, filename)
         with open(path_to_file,'w') as file:
             file.write("No. of trials: {}".format(numberOfTrials))
             file.write("      ".format(numberOfTrials))
-            file.write("Avg. number of episodes: {}".format(np.mean(allEpisodes)))
+            file.write("Avg. number of episodes: {}".format(np.mean(allTrials)))
 
