@@ -1,7 +1,7 @@
 import numpy as np
 import inspect
 import tensorflow as tf
-from capstone import logz
+from util import logz
 import os
 import time
 from collections import deque
@@ -18,9 +18,6 @@ class PolicyGradientAgent():
                  environment,
                  learning_rate,
                  discount_rate,
-                 exploration_rate,
-                 exploration_rate_min,
-                 exploration_rate_decay,
                  number_of_episodes_per_update,
                  #replay_sampling_batch_size,
                  nn_architecture,
@@ -33,9 +30,6 @@ class PolicyGradientAgent():
         :param environment: an OpenAI gym environment
         :param learning_rate: the learning rate used for gradient descent
         :param discount_rate: the discount rate used for reinforcement learning
-        :param exploration_rate: the initial exploration rate
-        :param exploration_rate_min: the minimum value of the exploration rate achieved after exploration rate decay
-        :param exploration_rate_decay: the factor by which the current exploration rate is multiplied per time step
         :param number_of_episode_per_update: how many times is the environment simulated without
                            doing an update of the parametrized policy
         :param nn_architecture: layout of the neural network used for function approximation.
@@ -53,9 +47,6 @@ class PolicyGradientAgent():
         # define hyperparameters
         self.learning_rate = learning_rate                   # often called alpha
         self.discount_rate = discount_rate                   # often called gamma
-        self.exploration_rate = exploration_rate             # often called epsilon
-        self.exploration_rate_min = exploration_rate_min
-        self.exploration_rate_decay = exploration_rate_decay
         self.number_of_episodes_per_update = number_of_episodes_per_update
         self.nn_architecture = nn_architecture
         self.policyNetwork = self.build_model()
@@ -73,10 +64,11 @@ class PolicyGradientAgent():
 
     def reset(self):
         """
-        resets the exploration_rate to 1.0 and resets the neural network to its original status
+        resets the tensorflow computational graph and builds a new network; resets random seeds to 0
         """
+
+        tf.reset_default_graph()
         self.policyNetwork = self.build_model()
-        self.exploration_rate = 1.0
 
         # set initial seeds to 0
         tf.set_random_seed(0)
@@ -87,103 +79,104 @@ class PolicyGradientAgent():
         """
         Builds the neural network approximation of the policy with TensorFlow.
         """
-        tf.reset_default_graph()
+        self.graph = tf.Graph()
 
-        # specify the NN architecture
-        # ------------------------------
-        # the number of inputs to the NN is the size of the observation space
-        self.numberOfInputs = self.environment.observation_space.shape[0]
+        with self.graph.as_default():
+            # specify the NN architecture
+            # ------------------------------
+            # the number of inputs to the NN is the size of the observation space
+            self.numberOfInputs = self.environment.observation_space.shape[0]
 
-        # the output of the NN will be the probability of choosing action==left, so we have
-        # exactly one output
-        numberOfOutputs = 1
+            # the output of the NN will be the probability of choosing action==left, so we have
+            # exactly one output
+            numberOfOutputs = 1
 
-        initializer = tf.contrib.layers.variance_scaling_initializer()
+            initializer = tf.contrib.layers.variance_scaling_initializer()
 
-        # build the NN policy approximation
-        # ---------------
-        # this is just a vanilla multi-layer perceptron
-        self.X = tf.placeholder(tf.float32, shape=[None, self.numberOfInputs])
+            # build the NN policy approximation
+            # ---------------
+            # this is just a vanilla multi-layer perceptron
+            self.X = tf.placeholder(tf.float32, shape=[None, self.numberOfInputs])
 
-        # depending on self.nn_architecture, build a NN with 1, 2 or 3 hidden layers
-        if len(self.nn_architecture) == 1:
-            last_hidden = tf.layers.dense(self.X, self.nn_architecture[0], activation=tf.nn.relu,
+            # depending on self.nn_architecture, build a NN with 1, 2 or 3 hidden layers
+            if len(self.nn_architecture) == 1:
+                last_hidden = tf.layers.dense(self.X, self.nn_architecture[0], activation=tf.nn.relu,
+                                         kernel_initializer=initializer)
+            elif len(self.nn_architecture) == 2:
+                hidden1 = tf.layers.dense(self.X, self.nn_architecture[0], activation=tf.nn.relu,
+                                         kernel_initializer=initializer)
+                last_hidden = tf.layers.dense(hidden1, self.nn_architecture[1], activation=tf.nn.relu,
+                                         kernel_initializer=initializer)
+            elif len(self.nn_architecture) == 3:
+                hidden1 = tf.layers.dense(self.X, self.nn_architecture[0], activation=tf.nn.relu,
+                                         kernel_initializer=initializer)
+                hidden2 = tf.layers.dense(hidden1, self.nn_architecture[1], activation=tf.nn.relu,
+                                         kernel_initializer=initializer)
+                last_hidden = tf.layers.dense(hidden2, self.nn_architecture[2], activation=tf.nn.relu,
+                                         kernel_initializer=initializer)
+            else:
+                raise ValueError("Wrong NN architecture specified.")
+    
+    
+            logits = tf.layers.dense(last_hidden, numberOfOutputs,
                                      kernel_initializer=initializer)
-        elif len(self.nn_architecture) == 2:
-            hidden1 = tf.layers.dense(self.X, self.nn_architecture[0], activation=tf.nn.relu,
-                                     kernel_initializer=initializer)
-            last_hidden = tf.layers.dense(hidden1, self.nn_architecture[1], activation=tf.nn.relu,
-                                     kernel_initializer=initializer)
-        elif len(self.nn_architecture) == 3:
-            hidden1 = tf.layers.dense(self.X, self.nn_architecture[0], activation=tf.nn.relu,
-                                     kernel_initializer=initializer)
-            hidden2 = tf.layers.dense(hidden1, self.nn_architecture[1], activation=tf.nn.relu,
-                                     kernel_initializer=initializer)
-            last_hidden = tf.layers.dense(hidden2, self.nn_architecture[2], activation=tf.nn.relu,
-                                     kernel_initializer=initializer)
-        else:
-            raise ValueError("Wrong NN architecture specified.")
-
-
-        logits = tf.layers.dense(last_hidden, numberOfOutputs,
-                                 kernel_initializer=initializer)
-
-        # use the sigmoid (not the softmax) activation function for the last
-        #     layer because we have just 2 possible actions
-        outputs = tf.nn.sigmoid(logits)
-
-
-        ############ action selection ############
-        # select random action based on the estimated probabilities
-        # --------------------------------------------------------------
-        probabilitiesForGoingLeftAndRight = tf.concat(
-            axis=1,
-            values=[outputs, 1 - outputs]
-        )
-
-        # call the multinomial function to pick a random action based on the
-        # calculated probabilities
-        self.action = tf.multinomial(
-            tf.log(probabilitiesForGoingLeftAndRight), num_samples=1)
-
-        ############ define the cost function to train the network ############
-        # 4. set the target probability
-        #
-        # We are acting as though the chosen action is the best possible action
-        # which means that the target probability must be 1.0 if the chosen action
-        # is 0 (left) and 0.0 if the chosen action is 1 (right)
-        y = 1. - tf.to_float(self.action)
-
-        # with the target probability defined, we can now define the cost function
-        cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=y, logits=logits)
-
-        # choose an optimizer, set it's learning rate and compute the gradients of the
-        #   the cost function
-        optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-
-        # the next command returns a a list of (gradient, variable) pairs where 'gradient' is
-        #   the gradient for 'variable'
-        gradients_wrt_to_variables = optimizer.compute_gradients(cross_entropy)
-
-        # put gradients into their own list (they will be changed later)
-        self.gradients = [gradient for gradient, variable in gradients_wrt_to_variables]
-
-        # during the execution phase, the gradients will be tweaked and reapplied to the
-        #  optimizer. first, we need a list that can hold the tweaked gradients. In this list,
-        #  we have to initialize some tensorflow placeholders
-        self.tweakedGradientPlaceholders = []
-        tweakedGradientsAndVariables = []
-
-        for gradient, variable in gradients_wrt_to_variables:
-            gradientPlaceholder = tf.placeholder(tf.float32, shape=gradient.get_shape())
-            self.tweakedGradientPlaceholders.append(gradientPlaceholder)
-            tweakedGradientsAndVariables.append((gradientPlaceholder, variable))
-
-        # for training, we apply these tweaked gradients to the optimizer
-        self.trainingOperation = optimizer.apply_gradients(tweakedGradientsAndVariables)
-
-        self.init = tf.global_variables_initializer()
-        self.saver = tf.train.Saver()
+    
+            # use the sigmoid (not the softmax) activation function for the last
+            #     layer because we have just 2 possible actions
+            outputs = tf.nn.sigmoid(logits)
+    
+    
+            ############ action selection ############
+            # select random action based on the estimated probabilities
+            # --------------------------------------------------------------
+            probabilitiesForGoingLeftAndRight = tf.concat(
+                axis=1,
+                values=[outputs, 1 - outputs]
+            )
+    
+            # call the multinomial function to pick a random action based on the
+            # calculated probabilities
+            self.action = tf.multinomial(
+                tf.log(probabilitiesForGoingLeftAndRight), num_samples=1)
+    
+            ############ define the cost function to train the network ############
+            # 4. set the target probability
+            #
+            # We are acting as though the chosen action is the best possible action
+            # which means that the target probability must be 1.0 if the chosen action
+            # is 0 (left) and 0.0 if the chosen action is 1 (right)
+            y = 1. - tf.to_float(self.action)
+    
+            # with the target probability defined, we can now define the cost function
+            cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=y, logits=logits)
+    
+            # choose an optimizer, set it's learning rate and compute the gradients of the
+            #   the cost function
+            optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+    
+            # the next command returns a a list of (gradient, variable) pairs where 'gradient' is
+            #   the gradient for 'variable'
+            gradients_wrt_to_variables = optimizer.compute_gradients(cross_entropy)
+    
+            # put gradients into their own list (they will be changed later)
+            self.gradients = [gradient for gradient, variable in gradients_wrt_to_variables]
+    
+            # during the execution phase, the gradients will be tweaked and reapplied to the
+            #  optimizer. first, we need a list that can hold the tweaked gradients. In this list,
+            #  we have to initialize some tensorflow placeholders
+            self.tweakedGradientPlaceholders = []
+            tweakedGradientsAndVariables = []
+    
+            for gradient, variable in gradients_wrt_to_variables:
+                gradientPlaceholder = tf.placeholder(tf.float32, shape=gradient.get_shape())
+                self.tweakedGradientPlaceholders.append(gradientPlaceholder)
+                tweakedGradientsAndVariables.append((gradientPlaceholder, variable))
+    
+            # for training, we apply these tweaked gradients to the optimizer
+            self.trainingOperation = optimizer.apply_gradients(tweakedGradientsAndVariables)
+    
+            self.init = tf.global_variables_initializer()
+            self.saver = tf.train.Saver()
 
 
         #print("Done building TensorFlow graph.")
@@ -270,11 +263,14 @@ class PolicyGradientAgent():
         # at each step, compute the gradients that would make the chosen
         # action even more likely, but don't apply these gradients yet
 
-        with tf.Session() as sess:
-            self.init.run()
+        with tf.Session(graph=self.graph) as sess:
+            sess.run(tf.global_variables_initializer())
 
-            for episode in range(numberOfEpisodes):
-                print("Starting episode {}".format(episode))
+            # attention:
+            # the following loop will not loop numberOfEpisodes times, but only
+            #     numberOfEpisodes // self.number_of_episodes_per_update times
+            for episode in range( (numberOfEpisodes // self.number_of_episodes_per_update) ) :
+                print("Starting episode {}/{}.".format((episode * self.number_of_episodes_per_update), numberOfEpisodes))
                 # a list of all non-discounted rewards
                 all_states_in_one_episode = []
                 all_actions_in_one_episode = []
