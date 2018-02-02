@@ -304,11 +304,10 @@ class DQNforCartpole:
         """
         Perform "numberOfTrials" experiments with different seeds.
 
-        :param numberOfTrials:
-        :param numberOfEpisodesForEachTrial:
-        :param logdir:
-        :param seed:
-        :return:
+        :param numberOfTrials: specifies the number of experiments to perform for this agent
+        :param numberOfEpisodesForEachTrial: specifies the maximum number of episodes per experiment
+        :param logdir: specifies the logging directory
+        :param seed:  the random seed to use for numpy and tensorflow
         """
 
         allTrials = []
