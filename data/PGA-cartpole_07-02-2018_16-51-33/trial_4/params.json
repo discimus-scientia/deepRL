@@ -1,0 +1,6 @@
+{"discount_rate"	:	0.95,
+"exp_name"	:	"pga12",
+"learning_rate"	:	0.02,
+"nn_architecture"	:	[10,
+10],
+"number_of_episodes_per_update"	:	5}
