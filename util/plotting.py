@@ -4,12 +4,16 @@ import matplotlib.pyplot as plt
 import json
 import os
 
-def plot_data(data, value="AverageReturn"):
+def plot_data(data, value="AverageReturn", savename=None):
     if isinstance(data, list):
         data = pd.concat(data, ignore_index=True)
     sns.set(style="darkgrid", font_scale=1.5)
-    sns.tsplot(data=data, time="Episode", value=value, unit="Unit", condition="Condition")
-    plt.legend(loc='upper left').draggable()
+    g = sns.tsplot(data=data, time="Episode", value=value, unit="Unit", condition="Condition")
+    g.set(xlim=(0, 3000))
+    g.set(ylim=(0, 195))
+    plt.legend(loc='best').draggable()
+    fig = plt.gcf()
+    fig.savefig('figures/{}.pdf'.format(savename), bbox_inches='tight')
     plt.show()
 
 
@@ -42,7 +46,7 @@ def get_datasets(fpath, condition=None):
     return datasets
 
 
-def plot_result(logdir_root, value, legend=None):
+def plot_result(logdir_root, value, legend=None, savename=None):
     # import argparse
     # parser = argparse.ArgumentParser()
     # parser.add_argument('logdir', nargs='*')
@@ -72,4 +76,4 @@ def plot_result(logdir_root, value, legend=None):
     else:
         values = [value]
     for v in values:
-        plot_data(data, value=v)
+        plot_data(data, value=v, savename=savename)
