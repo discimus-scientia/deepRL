@@ -253,9 +253,10 @@ class PolicyGradientAgent():
         print("Starting new trial")
         start = time.time()
 
+        # define variable to keep score of the last 100 episodes
         lastHundredScores = deque(maxlen=100)
 
-        # declare variable to collect every trajectory
+        # define variable to collect every trajectory
         trajectories = []
 
 
@@ -290,6 +291,7 @@ class PolicyGradientAgent():
 
                     observation = self.environment.reset()
 
+                    # generate 1 trajectory
                     for timeStep in range(numberOfTimesteps):
                         states_for_emulation_run.append(observation)
                         all_states_in_one_episode.append(observation)
@@ -302,6 +304,9 @@ class PolicyGradientAgent():
                         actions_for_emulation_run.append(actionValue)
                         rewards_for_emulation_run.append(reward)
                         gradients_for_emulation_run.append(gradientValue)
+                        # once the done flag is true, we have one completed trajectory
+                        #    so we can break the loop and record the number of timeSteps it took
+                        #    to generate the episode
                         if done:
                             lastHundredScores.appendleft(timeStep)
                             break
